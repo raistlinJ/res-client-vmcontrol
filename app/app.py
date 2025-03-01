@@ -6,6 +6,8 @@ import logging
 import time
 import Pyro5.api
 
+from waitress import serve
+
 import os
 
 app = Flask(__name__)
@@ -126,3 +128,12 @@ def run_command():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# main driver function
+if __name__ == '__main__':
+
+    # run() method of Flask class runs the application 
+    # on the local development server.
+    #app.run()
+    #Use waitress to host
+    serve(app, host="0.0.0.0", port=5000)

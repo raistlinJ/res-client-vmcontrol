@@ -6,6 +6,8 @@ import logging
 import time
 import Pyro5.api
 
+from waitress import serve
+
 import os
 
 # Flask constructor takes the name of 
@@ -113,7 +115,7 @@ def run_command():
                     logging.debug("Waiting for experiment restore to complete...")
                     res = pEngine.execute("experiment status")
             output = "Completed\n"
-            output += "\n" + str(res)
+            #output += "\n" + str(res)
         
         return jsonify({"output": output}), 200
 
@@ -125,4 +127,6 @@ if __name__ == '__main__':
 
     # run() method of Flask class runs the application 
     # on the local development server.
-    app.run()
+    #app.run()
+    #Use waitress to host
+    serve(app, host="0.0.0.0", port=5000)

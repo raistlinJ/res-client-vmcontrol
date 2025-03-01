@@ -7,26 +7,18 @@ import time
 import Pyro5.api
 
 import os
-import sys
 
+# Flask constructor takes the name of 
+# current module (__name__) as argument.
 app = Flask(__name__)
-
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://",
-)
 
 # Route to serve the HTML page (client)
 @app.route('/')
-@limiter.limit("1/second", override_defaults=False)
 def index():
     return render_template('index.html')
 
 # Route to run a command
 @app.route('/run_command', methods=['POST', 'OPTIONS'])
-@limiter.limit("1 per 30 minutes")
 def run_command():
     # Get the password and configname from the request
     data = request.json
@@ -42,7 +34,7 @@ def run_command():
     try:
         # Call the start vm command
         
-        ns = Pyro5.api.locate_ns(ip,port)
+        ns = Pyro5.api.locate_ns("172.17.0.1",10291)
         
         pEngine = Pyro5.api.Proxy(ns.lookup("engine"))
         pUserPool = Pyro5.api.Proxy(ns.lookup("userpool"))
@@ -127,3 +119,10 @@ def run_command():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# main driver function
+if __name__ == '__main__':
+
+    # run() method of Flask class runs the application 
+    # on the local development server.
+    app.run()

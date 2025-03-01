@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, make_response, jsonify, render_template
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -19,6 +19,13 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return make_response(
+            jsonify(error=f"Rate limit exceeded: {e.description}")
+            , 429
+    )
+
 # Route to serve the HTML page (client)
 @app.route('/')
 @limiter.limit("1/second", override_defaults=False)
@@ -27,8 +34,9 @@ def index():
 
 # Route to run a command
 @app.route('/run_command', methods=['POST', 'OPTIONS'])
-@limiter.limit("1 per 30 minutes")
+@limiter.limit("1 per 15 seconds", override_defaults=False, error_message="Too Many Requests... slow down")
 def run_command():
+
     # Get the password and configname from the request
     data = request.json
     username = data.get('username')
@@ -43,7 +51,7 @@ def run_command():
     try:
         # Call the start vm command
         
-        ns = Pyro5.api.locate_ns(ip,port)
+        ns = Pyro5.api.locate_ns("172.17.0.1",10291)
         
         pEngine = Pyro5.api.Proxy(ns.lookup("engine"))
         pUserPool = Pyro5.api.Proxy(ns.lookup("userpool"))

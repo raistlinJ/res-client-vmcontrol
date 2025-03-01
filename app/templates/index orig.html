@@ -17,6 +17,7 @@
             document.getElementById('start').disabled = true;
             document.getElementById('stop').disabled = true;
             document.getElementById('status').disabled = true;
+            document.getElementById('restore').disabled = true;
 
             const data = { username: username, password: password, configname: configname, command: command };
 
@@ -38,6 +39,7 @@
             document.getElementById('start').disabled = false;
             document.getElementById('stop').disabled = false;
             document.getElementById('status').disabled = false;
+            document.getElementById('restore').disabled = false;
         }
     </script>
 </head>
@@ -57,6 +59,7 @@
         <button id='start' onclick="submitForm(this.id)" type="submit">Start VM</button>
         <button id='stop' onclick="submitForm(this.id)" type="submit">Stop VM</button>
         <button id='status' onclick="submitForm(this.id)" type="submit">Get Status</button>
+        <button id='restore' onclick="submitForm(this.id)" type="submit">Restore VM </button> (you will lose all progress)
     </form>
 
     <h2>Output</h2>

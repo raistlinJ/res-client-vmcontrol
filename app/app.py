@@ -7,7 +7,6 @@ import time
 import Pyro5.api
 
 import os
-import sys
 
 app = Flask(__name__)
 
@@ -121,7 +120,7 @@ def run_command():
                     logging.debug("Waiting for experiment restore to complete...")
                     res = pEngine.execute("experiment status")
             output = "Completed\n"
-            output += "\n" + str(res)
+            #output += "\n" + str(res)
         
         return jsonify({"output": output}), 200
 

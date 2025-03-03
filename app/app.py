@@ -5,12 +5,27 @@ from flask_limiter.util import get_remote_address
 import logging
 import time
 import Pyro5.api
+import sys
 
 from waitress import serve
 
 import os
 
 app = Flask(__name__)
+
+nameserver_ip = os.environ.get('ENAMESERVER_IP')
+tnameserver_port = os.environ.get('ENAMESERVER_PORT')
+
+if (nameserver_ip == None or nameserver_ip == "") and (tnameserver_port == None or tnameserver_port == ""):
+    print("Usage: nameserver_ip nameserver_port")
+    exit(-1)
+
+print(" 1st: " + str(nameserver_ip) + " 2nd: " + str(tnameserver_port))
+
+if isinstance(tnameserver_port,str):
+    nameserver_port = int(tnameserver_port)
+else:
+    nameserver_port = tnameserver_port
 
 limiter = Limiter(
     get_remote_address,
@@ -34,7 +49,7 @@ def index():
 
 # Route to run a command
 @app.route('/run_command', methods=['POST', 'OPTIONS'])
-@limiter.limit("1 per 15 seconds", override_defaults=False, error_message="Too Many Requests... slow down")
+@limiter.limit("1 per 10 seconds", override_defaults=False, error_message="Only 1 request per 10 seconds allowed")
 def run_command():
 
     # Get the password and configname from the request
@@ -43,15 +58,14 @@ def run_command():
     password = data.get('password')
     configname = data.get('configname')
     command = data.get('command')
-    
+    cloneVMNames = []
     # Check if configname is provided
     if not configname:
         return jsonify({"error": "No Scenario Name Provided"}), 400
 
     try:
-        # Call the start vm command
-        
-        ns = Pyro5.api.locate_ns("172.17.0.1",10291)
+        # Connect to remote nameserver
+        ns = Pyro5.api.locate_ns(nameserver_ip,nameserver_port)
         
         pEngine = Pyro5.api.Proxy(ns.lookup("engine"))
         pUserPool = Pyro5.api.Proxy(ns.lookup("userpool"))
@@ -62,80 +76,87 @@ def run_command():
             logging.debug("Waiting for experiment start to complete...")
             res = pEngine.execute("vm-manage mgrstatus")
 
-        creds_file = ""
-        usersConns = pUserPool.generateUsersConns(configname, creds_file=creds_file)
+        usersConns = pUserPool.generateUsersConns(configname)
         if (username, password) in usersConns:
-            conn = usersConns[(username, password)][0]
-            cloneVMName = conn[0]
+            vmInfos = usersConns[(username, password)]
         else:
             return jsonify({"error": "Invalid username or password"}), 403
+
+        for vmInfo in vmInfos:
+            #check if vrdp
+            if vmInfo[2] != "":
+                cloneVMNames.append(vmInfo[0])
         
-        #####---Start Experiment Test#####
-        ##Note that any guestcontrol operations will require guest additions to be installed on the VM
-        logging.info("Starting Experiment")
-
+        # Execute command for each vm with rdp enabled and return result
         cmds = []
+        output = ""
         if command == "start":
-            cmds.append("experiment start " + configname + " vm " + str(cloneVMName))
-            for cmd in cmds:
-                pEngine.execute(cmd)
-                res = pEngine.execute("experiment status")
-                logging.debug("Waiting for experiment start to complete...")
-
-                while res["writeStatus"] != 0:
-                    time.sleep(.1)
-                    logging.debug("Waiting for experiment start to complete...")
+            for cloneVMName in cloneVMNames:
+                cmds.append("experiment start " + configname + " vm " + str(cloneVMName))
+                for cmd in cmds:
+                    pEngine.execute(cmd)
                     res = pEngine.execute("experiment status")
-            output = "Completed"
-            #output += "\n" + str(res)
+                    logging.debug("Waiting for experiment start to complete...")
+
+                    while res["writeStatus"] != 0:
+                        time.sleep(.1)
+                        logging.debug("Waiting for experiment start to complete...")
+                        res = pEngine.execute("experiment status")
+                output = cmd + " Completed\n"
 
         elif command == "stop":
-            cmds.append("experiment stop " + configname + " vm " + str(cloneVMName))
-            for cmd in cmds:
-                pEngine.execute(cmd)
-                res = pEngine.execute("vm-manage mgrstatus")
-                logging.debug("Waiting for experiment stop to complete...")
-                while res["writeStatus"] != 0:
-                    time.sleep(.1)
+            for cloneVMName in cloneVMNames:
+                cmds.append("experiment stop " + configname + " vm " + str(cloneVMName))
+                for cmd in cmds:
+                    pEngine.execute(cmd)
+                    res = pEngine.execute("vm-manage mgrstatus")
                     logging.debug("Waiting for experiment stop to complete...")
-                    res = pEngine.execute("experiment status")
-            output = "Completed"
-            #output += "\n" + str(res)
+                    while res["writeStatus"] != 0:
+                        time.sleep(.1)
+                        logging.debug("Waiting for experiment stop to complete...")
+                        res = pEngine.execute("experiment status")
+                output = cmd + " Completed\n"
 
         elif command == "status":
-            cmd = "vm-manage refresh " + str(cloneVMName)
-            pEngine.execute(cmd)
-            res = pEngine.execute("vm-manage mgrstatus")
-            logging.debug("Waiting for vm refresh update to complete...")
-            while res["writeStatus"] != 0:
-                time.sleep(.1)
-                logging.debug("Waiting for vm refresh update to complete...")
-                res = pEngine.execute("vm-manage mgrstatus")
-            res = pEngine.execute("vm-manage vmstatus " + str(cloneVMName))
-            if res != None and "vmState" in res and res["vmState"] != None and res["vmState"] != "" and "vmName" in res and res["vmName"] != None and res["vmName"] != "":
-                vmName = os.path.basename(res["vmName"])
-                output = "VM: " + str(vmName) + "\nStatus: " + str(res["vmState"])
-            else:
-                output = "Error Querying VM State"
-            #output += "\n" + str(res)
-                    
-        elif command == "restore":
-            cmds.append("experiment restore " + configname + " vm " + str(cloneVMName))
-            for cmd in cmds:
+            for cloneVMName in cloneVMNames:
+                cmd = "vm-manage refresh " + str(cloneVMName)
                 pEngine.execute(cmd)
-                res = pEngine.execute("experiment status")
-                logging.debug("Waiting for experiment restore to complete...")
+                res = pEngine.execute("vm-manage mgrstatus")
+                logging.debug("Waiting for vm refresh update to complete...")
                 while res["writeStatus"] != 0:
                     time.sleep(.1)
-                    logging.debug("Waiting for experiment restore to complete...")
+                    logging.debug("Waiting for vm refresh update to complete...")
+                    res = pEngine.execute("vm-manage mgrstatus")
+                res = pEngine.execute("vm-manage vmstatus " + str(cloneVMName))
+                vmName = os.path.basename(cloneVMName)
+                if res == -1:
+                    output += "VM: " + str(vmName) + ": missing\n"
+                elif res != None and "vmState" in res and res["vmState"] != None and res["vmState"] != "" and "vmName" in res and res["vmName"] != None and res["vmName"] != "":
+                    output += "VM: " + str(vmName) + ": " + str(res["vmState"] + "\n")
+                else:
+                    output += "VM: " + str(vmName) + ": Error Querying VM State\n"
+                    
+        elif command == "restore":
+            for cloneVMName in cloneVMNames:
+                cmds.append("experiment stop " + configname + " vm " + str(cloneVMName))
+                cmds.append("experiment restore " + configname + " vm " + str(cloneVMName))
+                cmds.append("experiment start " + configname + " vm " + str(cloneVMName))
+                for cmd in cmds:
+                    pEngine.execute(cmd)
                     res = pEngine.execute("experiment status")
-            output = "Completed\n"
-            #output += "\n" + str(res)
+                    logging.debug("Waiting for experiment restore to complete...")
+                    while res["writeStatus"] != 0:
+                        time.sleep(.1)
+                        logging.debug("Waiting for experiment restore to complete...")
+                        res = pEngine.execute("experiment status")
+                    output += cmd + " Completed\n"
+                output += "\n"
         
         return jsonify({"output": output}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+        #return jsonify({"error": str("The config name is incorrect or it does not exist")}), 500
 
 # main driver function
 if __name__ == '__main__':

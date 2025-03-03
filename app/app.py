@@ -83,15 +83,14 @@ def run_command():
             return jsonify({"error": "Invalid username or password"}), 403
 
         for vmInfo in vmInfos:
-            #check if vrdp
-            if vmInfo[2] != "":
-                cloneVMNames.append(vmInfo[0])
+            cloneVMNames.append(vmInfo[0])
         
         # Execute command for each vm with rdp enabled and return result
         cmds = []
         output = ""
         if command == "start":
             for cloneVMName in cloneVMNames:
+                cmds = []
                 cmds.append("experiment start " + configname + " vm " + str(cloneVMName))
                 for cmd in cmds:
                     pEngine.execute(cmd)
@@ -106,6 +105,7 @@ def run_command():
 
         elif command == "stop":
             for cloneVMName in cloneVMNames:
+                cmds = []
                 cmds.append("experiment stop " + configname + " vm " + str(cloneVMName))
                 for cmd in cmds:
                     pEngine.execute(cmd)
@@ -138,6 +138,7 @@ def run_command():
                     
         elif command == "restore":
             for cloneVMName in cloneVMNames:
+                cmds = []
                 cmds.append("experiment stop " + configname + " vm " + str(cloneVMName))
                 cmds.append("experiment restore " + configname + " vm " + str(cloneVMName))
                 cmds.append("experiment start " + configname + " vm " + str(cloneVMName))
